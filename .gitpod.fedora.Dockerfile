@@ -1,8 +1,8 @@
-FROM library/archlinux
-RUN pacman -Syu --noconfirm && \
-    pacman -S --noconfirm base-devel git git-lfs htop sudo nano vim man-db zsh fish ripgrep stow which emacs-nox multitail ruby openssh \
-    lsof jq zip unzip meson docker clang lld rlwrap clojure go rustup cmake apache nginx php php-fpm php-gd php-pgsql php-sqlite python-pip nodejs npm wget \
-     && locale-gen en_US.UTF-8 
+FROM library/fedora
+RUN dnf update -y && \
+    dnf groupinstall "Development Tools" "Development Libraries" -y && \
+    dnf install -y git-lfs nano vim man-db zsh fish ripgrep stow which emacs-nox multitail \
+    ruby openssh lsof jq meson docker clang lld rlwrap clojure go cmake httpd nginx php php-fpm php-gd php-pgsql nodejs npm wget
 
 ### Gitpod user ###
 COPY sudoers /etc
@@ -35,6 +35,19 @@ RUN pip install --no-cache-dir --upgrade \
 	twine && curl -sSL https://install.python-poetry.org | python
 RUN sudo rm -rf /tmp/*
 
+# Install Rust and Cargo
+ENV PATH=$HOME/.cargo/bin:$PATH
+
+RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --no-modify-path --default-toolchain stable \
+        -c rls rust-analysis rust-src rustfmt clippy \
+    && for cmp in rustup cargo; do rustup completions bash "$cmp" > "$HOME/.local/share/bash-completion/completions/$cmp"; done \
+    && printf '%s\n'    'export CARGO_HOME=/workspace/.cargo' \
+                        'mkdir -m 0755 -p "$CARGO_HOME/bin" 2>/dev/null' \
+                        'export PATH=$CARGO_HOME/bin:$PATH' \
+                        'test ! -e "$CARGO_HOME/bin/rustup" && mv "$(command -v rustup)" "$CARGO_HOME/bin"' > $HOME/.bashrc.d/80-rust \
+    && cargo install cargo-watch cargo-edit cargo-workspaces \
+    && rm -rf "$HOME/.cargo/registry" # This registry cache is now useless as we change the CARGO_HOME path to `/workspace`
+
 RUN gem install bundler --no-document \
         && gem install solargraph --no-document
 
@@ -63,6 +76,7 @@ USER gitpod
 # Making sure SSH is worked as expected
 USER root
 RUN ssh-keygen -A
+USER gitpod
 
 # Configure Apache and Nginx
 USER root
